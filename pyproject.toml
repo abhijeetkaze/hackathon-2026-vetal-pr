@@ -1,0 +1,18 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "vetal"
+version = "0.1.0"
+description = "A ghost from the Vikram-Vetal tales that won't let you push until you explain your own diff. Runs on local Gemma."
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.9"
+dependencies = []
+
+[project.scripts]
+vetal = "vetal.cli:main"
+
+[tool.setuptools]
+packages = ["vetal"]

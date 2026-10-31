@@ -1,0 +1,120 @@
+# Vetal on pull requests.
+#  - A PR is opened or updated  -> Vetal reads the diff, posts a tale + riddle, sets `vetal` pending.
+#  - PR author comments `/answer ...` -> Vetal judges it, replies, sets `vetal` success/failure.
+# Make `vetal` a required status check in branch protection to really block merges.
+#
+# Safety: this workflow never checks out or runs PR code. Vetal is installed from the default
+# branch, and the PR diff is fetched as plain text with `gh pr diff`.
+name: vetal
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+  statuses: write
+
+concurrency:
+  group: vetal-${{ github.event.pull_request.number || github.event.issue.number }}
+  cancel-in-progress: false
+
+env:
+  VETAL_MODEL: gemma3:1b
+  GH_TOKEN: ${{ github.token }}
+  REPO: ${{ github.repository }}
+
+jobs:
+  vetal:
+    if: >-
+      github.event_name == 'pull_request' ||
+      (github.event.issue.pull_request &&
+       startsWith(github.event.comment.body, '/answer') &&
+       github.event.comment.user.login == github.event.issue.user.login)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out Vetal (default branch only, never PR code)
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Vetal
+        run: pip install .
+        # In another repo use: pip install git+https://github.com/abhijeetkaze/hackathon-2026-vetal-pr
+
+      - name: Gather PR facts
+        id: pr
+        env:
+          NUMBER: ${{ github.event.pull_request.number || github.event.issue.number }}
+        run: |
+          head=$(gh pr view "$NUMBER" -R "$REPO" --json headRefOid -q .headRefOid)
+          gh pr diff "$NUMBER" -R "$REPO" > pr.diff
+          echo "number=$NUMBER" >> "$GITHUB_OUTPUT"
+          echo "head=$head" >> "$GITHUB_OUTPUT"
+
+      - name: Mark check pending
+        if: github.event_name == 'pull_request'
+        run: >
+          gh api "repos/$REPO/statuses/${{ steps.pr.outputs.head }}"
+          -f state=pending -f context=vetal
+          -f description="Vetal is reading your diff..." > /dev/null
+
+      - name: Cache Gemma weights
+        uses: actions/cache@v4
+        with:
+          path: ~/.ollama/models
+          key: ollama-${{ env.VETAL_MODEL }}
+
+      - name: Wake the ghost (Ollama + Gemma)
+        run: |
+          curl -fsSL https://ollama.com/install.sh | sh
+          sudo systemctl stop ollama 2>/dev/null || true
+          nohup ollama serve > /tmp/ollama.log 2>&1 &
+          for i in $(seq 1 30); do curl -sf http://127.0.0.1:11434/api/tags > /dev/null && break; sleep 1; done
+          ollama pull "$VETAL_MODEL"
+
+      - name: Ask the riddle
+        if: github.event_name == 'pull_request'
+        run: |
+          vetal ci-ask --diff-file pr.diff --head "${{ steps.pr.outputs.head }}" > reply.md
+          gh pr comment "${{ steps.pr.outputs.number }}" -R "$REPO" --body-file reply.md
+          gh api "repos/$REPO/statuses/${{ steps.pr.outputs.head }}" \
+            -f state=pending -f context=vetal \
+            -f description="Vetal awaits your /answer" > /dev/null
+
+      - name: Judge the answer
+        if: github.event_name == 'issue_comment'
+        env:
+          ANSWER: ${{ github.event.comment.body }}
+        run: |
+          printf '%s' "$ANSWER" > answer.txt
+          gh api "repos/$REPO/issues/${{ steps.pr.outputs.number }}/comments" --paginate \
+            | jq -s 'add' > comments.json
+          set +e
+          vetal ci-judge --diff-file pr.diff --comments-file comments.json \
+            --answer-file answer.txt --head "${{ steps.pr.outputs.head }}" > reply.md
+          code=$?
+          set -e
+          gh pr comment "${{ steps.pr.outputs.number }}" -R "$REPO" --body-file reply.md
+          case $code in
+            0) state=success; desc="Vetal let go" ;;
+            1) state=failure; desc="Vetal clings on - try another /answer" ;;
+            *) exit 0 ;;
+          esac
+          gh api "repos/$REPO/statuses/${{ steps.pr.outputs.head }}" \
+            -f state=$state -f context=vetal -f description="$desc" > /dev/null
+
+      - name: Vetal fell asleep
+        if: failure()
+        run: |
+          gh api "repos/$REPO/statuses/${{ steps.pr.outputs.head }}" \
+            -f state=error -f context=vetal -f description="Vetal fell asleep (workflow error)" > /dev/null || true
