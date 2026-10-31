@@ -1,1 +1,0 @@
-I gave git a ghost. Vetal, from the old Vikram–Vetal tales, drops onto your shoulders at every git push and pull request, tells a tale that mirrors your diff, and won't let go until you answer his riddle about your own change. Runs on local Gemma, so your code never leaves your machine. 🌳 #hf26challenge

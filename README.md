@@ -1,5 +1,9 @@
 # 🌳 Vetal — a ghost that won't let you push until you explain your own diff
 
+![Vetal](docs/banner.png)
+
+▶️ [Watch the 22-second intro](docs/video.mp4)
+
 In the old Indian tales of **Vikram and Vetal**, King Vikram must carry a ghost down from a
 tamarind tree in the cremation ground. On the way, Vetal tells him a story that ends in a riddle.
 *"If you know the answer and keep silent,"* says the ghost, *"your head will burst into a
