@@ -112,4 +112,4 @@ VETAL_BACKEND=fake python -m unittest   # stand-in model, no Ollama needed
 ```
 
 Built for the [DEV Hacktoberfest 2026 Open-Source AI Challenge — Week 4: Ghost in the Machine](https://dev.to/challenges/hacktoberfest-week4-2026-10-26).
-MIT licensed.
+Apache 2.0 licensed.
