@@ -84,6 +84,8 @@ diff is fetched as text. Only the PR author's `/answer` counts.
 
 ## How it works
 
+![How Vetal works](docs/flow.png)
+
 ```
 git push ──► pre-push hook ──► git diff (lockfiles/minified dropped, each file trimmed fairly)
                                    │
